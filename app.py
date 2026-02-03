@@ -37,13 +37,6 @@ PROJECTS = [
         "table_id": "tbloC4PHzAeRw2HR",
         "chat_ids": ["oc_bf660fc9a537b568e4737e19c18bc73a"]  # 测试 群ID
     },
-    # 新增项目模板：
-    # {
-    #     "name": "新项目名称",
-    #     "app_token": "从URL的base/后面复制",
-    #     "table_id": "从URL的table=后面复制",
-    #     "chat_ids": ["oc_xxx", "oc_yyy"]  # 可以配置多个群
-    # },
 ]
 
 # ============================================================
@@ -230,7 +223,7 @@ def index():
     """首页 - 用于检查服务状态"""
     return {
         "status": "running",
-        "message": "🤖 需求验收机器人运行中",
+        "message": "🤖 批次反馈机器人运行中",
         "projects": [{"name": p["name"], "chat_ids": p.get("chat_ids", [])} for p in PROJECTS]
     }
 
@@ -253,7 +246,7 @@ def webhook():
         
         message = event.get("message", {})
         message_id = message.get("message_id", "")
-        chat_id = message.get("chat_id", "")  # 🆕 获取群ID
+        chat_id = message.get("chat_id", "")
 
         # ========== 忽略旧消息 ==========
         create_time = message.get("create_time", "")
@@ -262,7 +255,6 @@ def webhook():
             if time.time() - msg_time > 300:
                 print(f"忽略过旧的消息（超过5分钟）: {message_id}")
                 return {"code": 0}
-        # =============================================
         
         # 消息去重
         if message_id in processed_messages:
@@ -283,8 +275,8 @@ def webhook():
         if len(processed_messages) > 1000:
             processed_messages.clear()
         
-        # 🆕 处理验收消息（传入 chat_id）
-        handle_acceptance(message, chat_id)
+        # ✅ 修复：调用正确的函数
+        handle_batch_feedback(message, chat_id)
             
     except Exception as e:
         print(f"处理出错: {e}")
@@ -299,7 +291,7 @@ def webhook():
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("🤖 需求验收机器人 (Webhook版)")
+    print("🤖 批次反馈机器人 (Webhook版)")
     print("=" * 50)
     print(f"APP_ID: {APP_ID[:10]}..." if APP_ID else "APP_ID: 未配置")
     print(f"已配置 {len(PROJECTS)} 个项目:")
