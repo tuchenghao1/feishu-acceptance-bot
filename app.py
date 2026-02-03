@@ -31,6 +31,12 @@ PROJECTS = [
         "table_id": "tbloC4PHzAeRw2HR",
         "chat_ids": ["oc_8433370f765f6c1134e14c71c46615a9"]  # Goodsort&图灵项目沟通群 群ID
     },
+        {
+        "name": "测试",
+        "app_token": "ADUtbWDICacuqisymHBc5doHnMd",
+        "table_id": "tbloC4PHzAeRw2HR",
+        "chat_ids": ["oc_bf660fc9a537b568e4737e19c18bc73a"]  # 测试 群ID
+    },
     # 新增项目模板：
     # {
     #     "name": "新项目名称",
