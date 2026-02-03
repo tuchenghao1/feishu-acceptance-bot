@@ -7,35 +7,33 @@ import json
 import re
 import os
 import time
+import requests  # 🆕 新增导入
+
 processed_messages = set()
 
 app = Flask(__name__)
 
 # ============================================================
-# 📌 配置区域（根据实际情况修改）
+# 📌 配置区域
 # ============================================================
 
-# 飞书应用凭证（从环境变量读取，更安全）
 APP_ID = os.environ.get("APP_ID", "")
 APP_SECRET = os.environ.get("APP_SECRET", "")
 
-# 字段名称（根据你的表格字段名修改）
 FIELD_BATCH = "批次"
 
-# 项目配置（新增项目在这里添加）
-# 🆕 添加 chat_ids 字段，关联项目群
 PROJECTS = [
     {
         "name": "货架",
         "app_token": "ADUtbWDICacuqisymHBc5doHnMd",
         "table_id": "tbloC4PHzAeRw2HR",
-        "chat_ids": ["oc_8433370f765f6c1134e14c71c46615a9"]  # Goodsort&图灵项目沟通群 群ID
+        "chat_ids": ["oc_8433370f765f6c1134e14c71c46615a9"]
     },
-        {
+    {
         "name": "测试",
         "app_token": "ADUtbWDICacuqisymHBc5doHnMd",
         "table_id": "tbloC4PHzAeRw2HR",
-        "chat_ids": ["oc_bf660fc9a537b568e4737e19c18bc73a"]  # 测试 群ID
+        "chat_ids": ["oc_bf660fc9a537b568e4737e19c18bc73a"]
     },
 ]
 
@@ -49,9 +47,24 @@ def get_client():
         .app_secret(APP_SECRET) \
         .build()
 
+
+def get_access_token():
+    """获取 tenant_access_token"""
+    token_url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
+    response = requests.post(token_url, json={
+        "app_id": APP_ID,
+        "app_secret": APP_SECRET
+    })
+    data = response.json()
+    if data.get("code") == 0:
+        return data.get("tenant_access_token")
+    print(f"  ❌ 获取token失败: {data}")
+    return None
+
 # ============================================================
 # 业务函数
 # ============================================================
+
 def find_project_by_chat_id(chat_id):
     """根据群ID查找对应的项目"""
     for project in PROJECTS:
@@ -63,27 +76,43 @@ def find_project_by_chat_id(chat_id):
 def find_records_by_batch(project, batch_name):
     """在指定项目中查找批次匹配的所有记录"""
     client = get_client()
-    request_body = SearchAppTableRecordRequest.builder() \
-        .app_token(project["app_token"]) \
-        .table_id(project["table_id"]) \
-        .request_body(SearchAppTableRecordRequestBody.builder()
-            .filter(FilterInfo.builder()
-                .conjunction("and")
-                .conditions([
-                    Condition.builder()
-                        .field_name(FIELD_BATCH)
-                        .operator("is")
-                        .value([batch_name])
-                        .build()
-                ])
-                .build())
-            .build()) \
-        .build()
     
-    response = client.bitable.v1.app_table_record.search(request_body)
-    if response.success() and response.data.items:
-        return response.data.items
-    return []
+    print(f"  🔍 查找批次: 「{batch_name}」")
+    
+    try:
+        request_body = SearchAppTableRecordRequest.builder() \
+            .app_token(project["app_token"]) \
+            .table_id(project["table_id"]) \
+            .request_body(SearchAppTableRecordRequestBody.builder()
+                .filter(FilterInfo.builder()
+                    .conjunction("and")
+                    .conditions([
+                        Condition.builder()
+                            .field_name(FIELD_BATCH)
+                            .operator("is")
+                            .value([batch_name])
+                            .build()
+                    ])
+                    .build())
+                .build()) \
+            .build()
+        
+        response = client.bitable.v1.app_table_record.search(request_body)
+        
+        print(f"  📊 搜索响应: success={response.success()}, code={response.code}, msg={response.msg}")
+        
+        if response.success() and response.data and response.data.items:
+            print(f"  ✅ 找到 {len(response.data.items)} 条记录")
+            return response.data.items
+        else:
+            print(f"  ⚠️ 未找到匹配记录")
+            return []
+            
+    except Exception as e:
+        print(f"  ❌ 搜索出错: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 
 def find_records_by_batch_in_all_projects(batch_name):
@@ -106,34 +135,63 @@ def get_message_link(message_id):
 
 def add_comment_to_record(project, record_id, comment_text):
     """给多维表格记录添加评论"""
-    client = get_client()
+    access_token = get_access_token()
+    if not access_token:
+        return False
     
-    request_body = CreateAppTableRecordCommentRequest.builder() \
-        .app_token(project["app_token"]) \
-        .table_id(project["table_id"]) \
-        .record_id(record_id) \
-        .request_body(CreateAppTableRecordCommentRequestBody.builder()
-            .content(comment_text)
-            .build()) \
-        .build()
+    comment_url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{project['app_token']}/tables/{project['table_id']}/records/{record_id}/comments"
     
-    response = client.bitable.v1.app_table_record_comment.create(request_body)
-    return response.success()
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "content": [
+            {
+                "type": "text",
+                "text": comment_text
+            }
+        ]
+    }
+    
+    response = requests.post(comment_url, headers=headers, json=payload)
+    result = response.json()
+    
+    print(f"  📊 评论响应: code={result.get('code')}, msg={result.get('msg')}")
+    
+    if result.get("code") == 0:
+        return True
+    else:
+        print(f"  ❌ 评论失败: {result}")
+        return False
 
 
 def reply_message(message_id, text):
     """回复消息"""
     client = get_client()
     content = json.dumps({"text": text})
-    request_body = ReplyMessageRequest.builder() \
-        .message_id(message_id) \
-        .request_body(ReplyMessageRequestBody.builder()
-            .msg_type("text")
-            .content(content)
-            .build()) \
-        .build()
     
-    client.im.v1.message.reply(request_body)
+    print(f"  💬 回复: {text[:50]}...")
+    
+    try:
+        request_body = ReplyMessageRequest.builder() \
+            .message_id(message_id) \
+            .request_body(ReplyMessageRequestBody.builder()
+                .msg_type("text")
+                .content(content)
+                .build()) \
+            .build()
+        
+        response = client.im.v1.message.reply(request_body)
+        
+        if response.success():
+            print(f"  💬 回复成功")
+        else:
+            print(f"  ❌ 回复失败: {response.code}, {response.msg}")
+            
+    except Exception as e:
+        print(f"  ❌ 回复出错: {e}")
 
 
 def handle_batch_feedback(message, chat_id):
@@ -149,28 +207,25 @@ def handle_batch_feedback(message, chat_id):
     # 匹配【xxx】物品需求反馈 格式
     match = re.search(r"【(.+?)】.*?物品需求反馈", text)
     if not match:
+        print("未匹配到批次反馈格式")
         return False
     
     batch_name = match.group(1).strip()
     print(f"📦 识别到批次反馈: {batch_name}")
     
-    # 生成消息链接
     message_link = get_message_link(message_id)
     print(f"🔗 消息链接: {message_link}")
     
-    # 确定项目
     project = find_project_by_chat_id(chat_id)
     
     if project:
-        # 根据群ID找到对应项目
-        records = find_records_by_batch(project, batch_name)
         print(f"📌 根据群ID匹配到项目: {project['name']}")
+        records = find_records_by_batch(project, batch_name)
         
         if not records:
             reply_message(message_id, f"❌ 在「{project['name']}」中未找到批次「{batch_name}」")
             return True
         
-        # 给所有匹配的记录添加评论
         success_count = 0
         for record in records:
             comment_text = f"📬 收到物品需求反馈\n🔗 消息链接: {message_link}"
@@ -185,7 +240,6 @@ def handle_batch_feedback(message, chat_id):
         return True
     
     else:
-        # 未配置群ID，搜索所有项目
         print(f"⚠️ 群 {chat_id} 未关联项目，搜索所有项目...")
         all_matches = find_records_by_batch_in_all_projects(batch_name)
         
@@ -200,7 +254,6 @@ def handle_batch_feedback(message, chat_id):
                 f"请联系管理员配置群ID关联")
             return True
         
-        # 只有一个项目匹配
         project = all_matches[0]["project"]
         records = all_matches[0]["records"]
         
@@ -220,19 +273,17 @@ def handle_batch_feedback(message, chat_id):
 
 @app.route("/", methods=["GET"])
 def index():
-    """首页 - 用于检查服务状态"""
     return {
         "status": "running",
         "message": "🤖 批次反馈机器人运行中",
         "projects": [{"name": p["name"], "chat_ids": p.get("chat_ids", [])} for p in PROJECTS]
     }
 
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    """接收飞书事件回调"""
     data = request.json
     
-    # URL 验证（飞书首次配置时会发送）
     if "challenge" in data:
         return {"challenge": data["challenge"]}
     
@@ -248,7 +299,6 @@ def webhook():
         message_id = message.get("message_id", "")
         chat_id = message.get("chat_id", "")
 
-        # ========== 忽略旧消息 ==========
         create_time = message.get("create_time", "")
         if create_time:
             msg_time = int(create_time) / 1000
@@ -256,26 +306,19 @@ def webhook():
                 print(f"忽略过旧的消息（超过5分钟）: {message_id}")
                 return {"code": 0}
         
-        # 消息去重
         if message_id in processed_messages:
             print(f"消息已处理，跳过: {message_id}")
             return {"code": 0}
         
-        # 过滤机器人自己发的消息
         sender = event.get("sender", {})
         sender_type = sender.get("sender_type", "")
         if sender_type == "app":
-            print("跳过机器人自己的消息")
             return {"code": 0}
         
-        # 记录已处理的消息
         processed_messages.add(message_id)
-        
-        # 限制集合大小，防止内存溢出
         if len(processed_messages) > 1000:
             processed_messages.clear()
         
-        # ✅ 修复：调用正确的函数
         handle_batch_feedback(message, chat_id)
             
     except Exception as e:
@@ -296,8 +339,7 @@ if __name__ == "__main__":
     print(f"APP_ID: {APP_ID[:10]}..." if APP_ID else "APP_ID: 未配置")
     print(f"已配置 {len(PROJECTS)} 个项目:")
     for p in PROJECTS:
-        chat_ids = p.get("chat_ids", [])
-        print(f"  - {p['name']} (关联 {len(chat_ids)} 个群)")
+        print(f"  - {p['name']} (关联 {len(p.get('chat_ids', []))} 个群)")
     print("=" * 50)
     
     port = int(os.environ.get("PORT", 3000))
