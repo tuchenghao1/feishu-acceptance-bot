@@ -2,12 +2,11 @@ from flask import Flask, request
 import lark_oapi as lark
 from lark_oapi.api.bitable.v1 import *
 from lark_oapi.api.im.v1 import *
-from lark_oapi.api.drive.v1 import *
 import json
 import re
 import os
 import time
-import requests  # 🆕 新增导入
+import requests
 
 processed_messages = set()
 
@@ -21,6 +20,7 @@ APP_ID = os.environ.get("APP_ID", "")
 APP_SECRET = os.environ.get("APP_SECRET", "")
 
 FIELD_BATCH = "批次"
+FIELD_FEEDBACK_LINK = "反馈链接"  # 🆕 新增：反馈链接字段名
 
 PROJECTS = [
     {
@@ -51,14 +51,17 @@ def get_client():
 def get_access_token():
     """获取 tenant_access_token"""
     token_url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
-    response = requests.post(token_url, json={
-        "app_id": APP_ID,
-        "app_secret": APP_SECRET
-    })
-    data = response.json()
-    if data.get("code") == 0:
-        return data.get("tenant_access_token")
-    print(f"  ❌ 获取token失败: {data}")
+    try:
+        response = requests.post(token_url, json={
+            "app_id": APP_ID,
+            "app_secret": APP_SECRET
+        })
+        data = response.json()
+        if data.get("code") == 0:
+            return data.get("tenant_access_token")
+        print(f"  ❌ 获取token失败: {data}")
+    except Exception as e:
+        print(f"  ❌ 获取token出错: {e}")
     return None
 
 # ============================================================
@@ -110,8 +113,6 @@ def find_records_by_batch(project, batch_name):
             
     except Exception as e:
         print(f"  ❌ 搜索出错: {e}")
-        import traceback
-        traceback.print_exc()
         return []
 
 
@@ -133,13 +134,16 @@ def get_message_link(message_id):
     return f"https://applink.feishu.cn/client/message/link?token={message_id}"
 
 
-def add_comment_to_record(project, record_id, comment_text):
-    """给多维表格记录添加评论"""
+def update_record_feedback_link(project, record_id, message_link):
+    """更新记录的反馈链接字段"""
+    print(f"  📝 准备更新记录: {record_id}")
+    
     access_token = get_access_token()
     if not access_token:
+        print(f"  ❌ 获取access_token失败")
         return False
     
-    comment_url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{project['app_token']}/tables/{project['table_id']}/records/{record_id}/comments"
+    update_url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{project['app_token']}/tables/{project['table_id']}/records/{record_id}"
     
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -147,35 +151,29 @@ def add_comment_to_record(project, record_id, comment_text):
     }
     
     payload = {
-        "content": [
-            {
-                "type": "text",
-                "text": comment_text
-            }
-        ]
+        "fields": {
+            FIELD_FEEDBACK_LINK: message_link
+        }
     }
     
     try:
-        response = requests.post(comment_url, headers=headers, json=payload)
+        print(f"  📤 发送更新请求...")
+        response = requests.put(update_url, headers=headers, json=payload)
         
-        print(f"  📊 评论响应状态码: {response.status_code}")
-        print(f"  📊 评论响应内容: {response.text[:500]}")
+        print(f"  📊 HTTP状态码: {response.status_code}")
+        print(f"  📊 响应内容: {response.text[:300]}")
         
         if response.status_code != 200:
             print(f"  ❌ HTTP错误: {response.status_code}")
             return False
         
-        try:
-            result = response.json()
-        except Exception as e:
-            print(f"  ❌ JSON解析失败: {e}")
-            return False
+        result = response.json()
         
         if result.get("code") == 0:
-            print(f"  ✅ 评论成功")
+            print(f"  ✅ 更新成功")
             return True
         else:
-            print(f"  ❌ 评论失败: code={result.get('code')}, msg={result.get('msg')}")
+            print(f"  ❌ 更新失败: code={result.get('code')}, msg={result.get('msg')}")
             return False
             
     except Exception as e:
@@ -188,7 +186,7 @@ def reply_message(message_id, text):
     client = get_client()
     content = json.dumps({"text": text})
     
-    print(f"  💬 回复: {text[:50]}...")
+    print(f"  💬 准备回复: {text[:50]}...")
     
     try:
         request_body = ReplyMessageRequest.builder() \
@@ -220,7 +218,6 @@ def handle_batch_feedback(message, chat_id):
     print(f"收到消息: {text}")
     print(f"来自群聊: {chat_id}")
     
-    # 匹配【xxx】物品需求反馈 格式
     match = re.search(r"【(.+?)】.*?物品需求反馈", text)
     if not match:
         print("未匹配到批次反馈格式")
@@ -244,15 +241,14 @@ def handle_batch_feedback(message, chat_id):
         
         success_count = 0
         for record in records:
-            comment_text = f"📬 收到物品需求反馈\n🔗 消息链接: {message_link}"
-            if add_comment_to_record(project, record.record_id, comment_text):
+            if update_record_feedback_link(project, record.record_id, message_link):
                 success_count += 1
-                print(f"  ✅ 已评论记录: {record.record_id}")
+                print(f"  ✅ 已更新记录: {record.record_id}")
             else:
-                print(f"  ❌ 评论失败: {record.record_id}")
+                print(f"  ❌ 更新失败: {record.record_id}")
         
         reply_message(message_id, 
-            f"✅ 已将反馈链接评论到「{project['name']}」批次「{batch_name}」的 {success_count}/{len(records)} 条记录")
+            f"✅ 已将反馈链接写入「{project['name']}」批次「{batch_name}」的 {success_count}/{len(records)} 条记录")
         return True
     
     else:
@@ -275,12 +271,11 @@ def handle_batch_feedback(message, chat_id):
         
         success_count = 0
         for record in records:
-            comment_text = f"📬 收到物品需求反馈\n🔗 消息链接: {message_link}"
-            if add_comment_to_record(project, record.record_id, comment_text):
+            if update_record_feedback_link(project, record.record_id, message_link):
                 success_count += 1
         
         reply_message(message_id, 
-            f"✅ 已将反馈链接评论到「{project['name']}」批次「{batch_name}」的 {success_count}/{len(records)} 条记录")
+            f"✅ 已将反馈链接写入「{project['name']}」批次「{batch_name}」的 {success_count}/{len(records)} 条记录")
         return True
 
 # ============================================================
