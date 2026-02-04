@@ -7,8 +7,6 @@ import re
 import os
 import time
 import requests
-import base64
-import urllib.parse
 
 processed_messages = set()
 
@@ -35,7 +33,7 @@ PROJECTS = [
         "name": "测试",
         "app_token": "ADUtbWDICacuqisymHBc5doHnMd",
         "table_id": "tbloC4PHzAeRw2HR",
-        "chat_ids": ["oc_76971be2ff0f2dbe035d130acc5f8798"]
+        "chat_ids": ["oc_bf660fc9a537b568e4737e19c18bc73a"]
     },
 ]
 
@@ -131,12 +129,10 @@ def find_records_by_batch_in_all_projects(batch_name):
     return all_matches
 
 
-def get_message_link(message_id):
+def get_message_link(message_id, chat_id):
     """生成飞书消息链接"""
-    # 将 message_id 进行 base64 编码，然后 URL 编码
-    token = base64.b64encode(message_id.encode()).decode()
-    encoded_token = urllib.parse.quote(token)
-    return f"https://applink.feishu.cn/client/message/link/open?token={encoded_token}"
+    # 使用飞书客户端打开聊天并定位到消息的链接格式
+    return f"https://applink.feishu.cn/client/chat/open?openChatId={chat_id}&openMessageId={message_id}"
 
 
 def get_record_current_value(project, record_id):
@@ -175,7 +171,7 @@ def get_record_current_value(project, record_id):
         return ""
 
 
-def update_record_feedback_link(project, record_id, message_link):
+def update_record_feedback_link(project, record_id, feedback_info):
     """更新记录的反馈链接字段（支持追加）"""
     print(f"  📝 准备更新记录: {record_id}")
     
@@ -184,20 +180,16 @@ def update_record_feedback_link(project, record_id, message_link):
         print(f"  ❌ 获取access_token失败")
         return False
     
-    # 🆕 先获取当前值
+    # 先获取当前值
     current_value = get_record_current_value(project, record_id)
     
-    # 🆕 生成带时间戳的新链接条目
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    new_entry = f"[{timestamp}] {message_link}"
-    
-    # 🆕 如果已有内容，则追加；否则直接使用新值
+    # 如果已有内容，则追加；否则直接使用新值
     if current_value:
-        new_value = f"{current_value}\n{new_entry}"
+        new_value = f"{current_value}\n{feedback_info}"
     else:
-        new_value = new_entry
+        new_value = feedback_info
     
-    print(f"  📝 新字段值: {new_entry}")
+    print(f"  📝 新增内容: {feedback_info}")
     
     update_url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{project['app_token']}/tables/{project['table_id']}/records/{record_id}"
     
@@ -273,8 +265,9 @@ def handle_batch_feedback(message, chat_id):
     print(f"\n{'='*50}")
     print(f"收到消息: {text}")
     print(f"来自群聊: {chat_id}")
+    print(f"消息ID: {message_id}")
     
-    match = re.search(r"【(.+?)】.*?物品需求反馈", text)
+    match = re.search(r"【(.+?)】.*?需求反馈", text)
     if not match:
         print("未匹配到批次反馈格式")
         return False
@@ -282,9 +275,14 @@ def handle_batch_feedback(message, chat_id):
     batch_name = match.group(1).strip()
     print(f"📦 识别到批次反馈: {batch_name}")
     
-    # ✅ 生成正确格式的消息链接
-    message_link = get_message_link(message_id)
-    print(f"🔗 消息链接: {message_link}")
+    # 生成消息链接
+    message_link = get_message_link(message_id, chat_id)
+    
+    # 生成带时间戳的反馈信息（只有时间和链接）
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    feedback_info = f"[{timestamp}] {message_link}"
+    
+    print(f"🔗 反馈信息: {feedback_info}")
     
     project = find_project_by_chat_id(chat_id)
     
@@ -298,7 +296,7 @@ def handle_batch_feedback(message, chat_id):
         
         success_count = 0
         for record in records:
-            if update_record_feedback_link(project, record.record_id, message_link):
+            if update_record_feedback_link(project, record.record_id, feedback_info):
                 success_count += 1
                 print(f"  ✅ 已更新记录: {record.record_id}")
             else:
@@ -328,7 +326,7 @@ def handle_batch_feedback(message, chat_id):
         
         success_count = 0
         for record in records:
-            if update_record_feedback_link(project, record.record_id, message_link):
+            if update_record_feedback_link(project, record.record_id, feedback_info):
                 success_count += 1
         
         reply_message(message_id, 
