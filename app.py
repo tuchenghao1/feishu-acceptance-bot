@@ -155,15 +155,31 @@ def add_comment_to_record(project, record_id, comment_text):
         ]
     }
     
-    response = requests.post(comment_url, headers=headers, json=payload)
-    result = response.json()
-    
-    print(f"  📊 评论响应: code={result.get('code')}, msg={result.get('msg')}")
-    
-    if result.get("code") == 0:
-        return True
-    else:
-        print(f"  ❌ 评论失败: {result}")
+    try:
+        response = requests.post(comment_url, headers=headers, json=payload)
+        
+        print(f"  📊 评论响应状态码: {response.status_code}")
+        print(f"  📊 评论响应内容: {response.text[:500]}")
+        
+        if response.status_code != 200:
+            print(f"  ❌ HTTP错误: {response.status_code}")
+            return False
+        
+        try:
+            result = response.json()
+        except Exception as e:
+            print(f"  ❌ JSON解析失败: {e}")
+            return False
+        
+        if result.get("code") == 0:
+            print(f"  ✅ 评论成功")
+            return True
+        else:
+            print(f"  ❌ 评论失败: code={result.get('code')}, msg={result.get('msg')}")
+            return False
+            
+    except Exception as e:
+        print(f"  ❌ 请求出错: {e}")
         return False
 
 
