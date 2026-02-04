@@ -20,7 +20,7 @@ APP_ID = os.environ.get("APP_ID", "")
 APP_SECRET = os.environ.get("APP_SECRET", "")
 
 FIELD_BATCH = "批次"
-FIELD_FEEDBACK_LINK = "反馈链接"  # 🆕 新增：反馈链接字段名
+FIELD_FEEDBACK_LINK = "反馈链接"
 
 PROJECTS = [
     {
@@ -129,9 +129,9 @@ def find_records_by_batch_in_all_projects(batch_name):
     return all_matches
 
 
-def get_message_link(message_id):
+def get_message_link(message_id, chat_id):
     """生成飞书消息链接"""
-    return f"https://applink.feishu.cn/client/message/link?token={message_id}"
+    return f"https://applink.feishu.cn/client/message?openChatId={chat_id}&openMessageId={message_id}"
 
 
 def update_record_feedback_link(project, record_id, message_link):
@@ -226,7 +226,8 @@ def handle_batch_feedback(message, chat_id):
     batch_name = match.group(1).strip()
     print(f"📦 识别到批次反馈: {batch_name}")
     
-    message_link = get_message_link(message_id)
+    # ✅ 修改：传入 chat_id 生成正确的链接
+    message_link = get_message_link(message_id, chat_id)
     print(f"🔗 消息链接: {message_link}")
     
     project = find_project_by_chat_id(chat_id)
