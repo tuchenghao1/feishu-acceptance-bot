@@ -27,7 +27,7 @@ PROJECTS = [
         "name": "货架",
         "app_token": "ADUtbWDICacuqisymHBc5doHnMd",
         "table_id": "tbloC4PHzAeRw2HR",
-        "chat_ids": ["oc_8433370f765f6c1134e14c71c46615a9"]
+        "chat_ids": ["xxxxxxxx"]
     },
     {
         "name": "测试",
