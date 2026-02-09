@@ -24,16 +24,10 @@ FIELD_FEEDBACK_LINK = "反馈链接"
 
 PROJECTS = [
     {
-        "name": "货架",
+        "name": "货架沟通群",
         "app_token": "ADUtbWDICacuqisymHBc5doHnMd",
         "table_id": "tbloC4PHzAeRw2HR",
-        "chat_ids": ["xxxxxxxx"]
-    },
-    {
-        "name": "测试",
-        "app_token": "ADUtbWDICacuqisymHBc5doHnMd",
-        "table_id": "tbloC4PHzAeRw2HR",
-        "chat_ids": ["oc_76971be2ff0f2dbe035d130acc5f8798"]
+        "chat_ids": ["oc_8433370f765f6c1134e14c71c46615a9"]
     },
 ]
 
