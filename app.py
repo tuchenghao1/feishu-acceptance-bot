@@ -125,7 +125,6 @@ def find_records_by_batch_in_all_projects(batch_name):
 
 def get_message_link(message_id, chat_id):
     """生成飞书消息链接"""
-    # 使用飞书客户端打开聊天并定位到消息的链接格式
     return f"https://applink.feishu.cn/client/chat/open?openChatId={chat_id}&openMessageId={message_id}"
 
 
@@ -174,10 +173,8 @@ def update_record_feedback_link(project, record_id, feedback_info):
         print(f"  ❌ 获取access_token失败")
         return False
     
-    # 先获取当前值
     current_value = get_record_current_value(project, record_id)
     
-    # 如果已有内容，则追加；否则直接使用新值
     if current_value:
         new_value = f"{current_value}\n{feedback_info}"
     else:
@@ -250,18 +247,61 @@ def reply_message(message_id, text):
         print(f"  ❌ 回复出错: {e}")
 
 
+def extract_text_from_message(message):
+    """从各种消息类型中提取文本内容"""
+    message_type = message.get("message_type", "")
+    content_str = message.get("content", "{}")
+    
+    print(f"  📨 消息类型: {message_type}")
+    print(f"  📨 原始内容: {content_str[:200]}...")
+    
+    try:
+        content = json.loads(content_str)
+    except:
+        print(f"  ⚠️ 内容解析失败，尝试作为纯文本处理")
+        return content_str
+    
+    # 纯文本消息
+    if message_type == "text":
+        return content.get("text", "")
+    
+    # 富文本消息 (post)
+    elif message_type == "post":
+        texts = []
+        # 尝试获取中文内容
+        post_content = content.get("zh_cn", content.get("en_us", {}))
+        if isinstance(post_content, dict):
+            # 遍历富文本内容
+            for paragraph in post_content.get("content", []):
+                for element in paragraph:
+                    if element.get("tag") == "text":
+                        texts.append(element.get("text", ""))
+                    elif element.get("tag") == "a":
+                        texts.append(element.get("text", ""))
+        return " ".join(texts)
+    
+    # 其他类型，尝试提取 text 字段
+    else:
+        if "text" in content:
+            return content.get("text", "")
+        # 尝试将整个内容转为字符串搜索
+        return str(content)
+
+
 def handle_batch_feedback(message, chat_id):
     """处理批次反馈消息"""
-    content = json.loads(message.get("content", "{}"))
-    text = content.get("text", "")
     message_id = message.get("message_id")
+    
+    # 🆕 使用新的文本提取函数
+    text = extract_text_from_message(message)
     
     print(f"\n{'='*50}")
     print(f"收到消息: {text}")
     print(f"来自群聊: {chat_id}")
     print(f"消息ID: {message_id}")
     
-    match = re.search(r"【(.+?)】.*?需求反馈", text)
+    # 🆕 正则匹配更宽松：支持 "物品需求反馈" 或 "需求反馈"
+    match = re.search(r"【(.+?)】.*?(?:物品)?需求反馈", text)
     if not match:
         print("未匹配到批次反馈格式")
         return False
@@ -269,10 +309,8 @@ def handle_batch_feedback(message, chat_id):
     batch_name = match.group(1).strip()
     print(f"📦 识别到批次反馈: {batch_name}")
     
-    # 生成消息链接
     message_link = get_message_link(message_id, chat_id)
     
-    # 生成带时间戳的反馈信息（只有时间和链接）
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     feedback_info = f"[{timestamp}] {message_link}"
     
