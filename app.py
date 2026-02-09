@@ -33,7 +33,7 @@ PROJECTS = [
         "name": "测试",
         "app_token": "ADUtbWDICacuqisymHBc5doHnMd",
         "table_id": "tbloC4PHzAeRw2HR",
-        "chat_ids": ["oc_bf660fc9a537b568e4737e19c18bc73a"]
+        "chat_ids": ["oc_76971be2ff0f2dbe035d130acc5f8798"]
     },
 ]
 
