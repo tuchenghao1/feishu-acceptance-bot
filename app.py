@@ -259,7 +259,7 @@ def extract_text_from_message(message):
     content_str = message.get("content", "{}")
     
     print(f"  📨 消息类型: {message_type}")
-    print(f"  📨 原始内容: {content_str[:200]}...")
+    print(f"  📨 原始内容: {content_str[:300]}...")
     
     try:
         content = json.loads(content_str)
@@ -274,23 +274,39 @@ def extract_text_from_message(message):
     # 富文本消息 (post)
     elif message_type == "post":
         texts = []
-        # 尝试获取中文内容
-        post_content = content.get("zh_cn", content.get("en_us", {}))
-        if isinstance(post_content, dict):
-            # 遍历富文本内容
-            for paragraph in post_content.get("content", []):
-                for element in paragraph:
-                    if element.get("tag") == "text":
-                        texts.append(element.get("text", ""))
-                    elif element.get("tag") == "a":
-                        texts.append(element.get("text", ""))
-        return " ".join(texts)
+        
+        # 情况1: 直接有 content 字段（常见格式）
+        if "content" in content:
+            for paragraph in content.get("content", []):
+                if isinstance(paragraph, list):
+                    for element in paragraph:
+                        if isinstance(element, dict):
+                            if element.get("tag") == "text":
+                                texts.append(element.get("text", ""))
+                            elif element.get("tag") == "a":
+                                texts.append(element.get("text", ""))
+        
+        # 情况2: 有 zh_cn 或 en_us 包装
+        elif "zh_cn" in content or "en_us" in content:
+            post_content = content.get("zh_cn", content.get("en_us", {}))
+            if isinstance(post_content, dict):
+                for paragraph in post_content.get("content", []):
+                    if isinstance(paragraph, list):
+                        for element in paragraph:
+                            if isinstance(element, dict):
+                                if element.get("tag") == "text":
+                                    texts.append(element.get("text", ""))
+                                elif element.get("tag") == "a":
+                                    texts.append(element.get("text", ""))
+        
+        result = "".join(texts)
+        print(f"  📨 提取文本: {result}")
+        return result
     
     # 其他类型，尝试提取 text 字段
     else:
         if "text" in content:
             return content.get("text", "")
-        # 尝试将整个内容转为字符串搜索
         return str(content)
 
 
@@ -298,7 +314,6 @@ def handle_batch_feedback(message, chat_id):
     """处理批次反馈消息"""
     message_id = message.get("message_id")
     
-    # 🆕 使用新的文本提取函数
     text = extract_text_from_message(message)
     
     print(f"\n{'='*50}")
@@ -306,7 +321,7 @@ def handle_batch_feedback(message, chat_id):
     print(f"来自群聊: {chat_id}")
     print(f"消息ID: {message_id}")
     
-    # 🆕 正则匹配更宽松：支持 "物品需求反馈" 或 "需求反馈"
+    # 严格匹配：【批次】需求反馈
     match = re.search(r"【(.+?)】需求反馈", text)
     if not match:
         print("未匹配到批次反馈格式")
