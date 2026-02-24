@@ -29,6 +29,12 @@ PROJECTS = [
         "table_id": "tbloC4PHzAeRw2HR",
         "chat_ids": ["oc_8433370f765f6c1134e14c71c46615a9"]
     },
+    {
+        "name": "测试",
+        "app_token": "ADUtbWDICacuqisymHBc5doHnMd",
+        "table_id": "tbloC4PHzAeRw2HR",
+        "chat_ids": ["oc_76971be2ff0f2dbe035d130acc5f8798"]
+    },
 ]
 
 # ============================================================
@@ -301,7 +307,7 @@ def handle_batch_feedback(message, chat_id):
     print(f"消息ID: {message_id}")
     
     # 🆕 正则匹配更宽松：支持 "物品需求反馈" 或 "需求反馈"
-    match = re.search(r"【(.+?)】.*?(?:物品)?需求反馈", text)
+    match = re.search(r"【(.+?)】需求反馈", text)
     if not match:
         print("未匹配到批次反馈格式")
         return False
